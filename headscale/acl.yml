@@ -1,0 +1,11 @@
+// headscale/acl.yaml — TEMPORARY stub, allow-all for stage 0 testing
+// TODO(stage 2): replace with deny-by-default + tag-based ACL
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["*"],
+      "dst": ["*:*"]
+    }
+  ]
+}
