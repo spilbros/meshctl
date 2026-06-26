@@ -1,0 +1,36 @@
+services:
+  headscale:
+    image: headscale/headscale:0.29.1
+    restart: unless-stopped
+    networks: [meshnet]
+    command: serve
+    healthcheck:
+        test: ["CMD", "headscale", "health"]
+    volumes:
+      - ./headscale/config.yaml:/etc/headscale/config.yaml:ro
+      - ./headscale/acl.yaml:/etc/headscale/acl.yaml:ro
+      - headscale_data:/var/lib/headscale
+
+  caddy:
+    image: caddy:2.11.4
+    restart: unless-stopped
+    networks: [meshnet]
+    depends_on: [headscale]
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+
+
+networks:
+  meshnet:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  headscale_data:
+

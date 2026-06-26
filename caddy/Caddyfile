@@ -1,0 +1,3 @@
+mesh.bucovskij.xyz {
+    reverse_proxy headscale:8080
+}
