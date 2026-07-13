@@ -1,0 +1,163 @@
+#!/usr/bin/env bash
+#
+# meshctl — MVP control panel for the headscale + caddy mesh stack.
+#
+# Plain bash, numbered menu (no arguments, no external deps beyond
+# docker/docker compose). See CLAUDE.md "Интерфейс meshctl" for the
+# planned gum and subcommand stages — do not add them here yet.
+
+set -uo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
+CONFIG_FILE="${SCRIPT_DIR}/headscale/config.yaml"
+
+compose() {
+    docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+hs() {
+    # `-T` only disables the pseudo-tty; `exec` still attaches real
+    # stdin by default, which would otherwise steal lines from the
+    # menu loop's own input (e.g. inside user_id_by_name). headscale
+    # never needs stdin here.
+    compose exec -T headscale headscale "$@" < /dev/null
+}
+
+# headscale's -u/--user flags on preauthkeys take a numeric user ID,
+# not a name, and there's no "get user by name" subcommand — so we
+# scrape `users list --output json` by hand (id line always precedes
+# name line per user object; no jq dependency on purpose, see
+# CLAUDE.md "Интерфейс meshctl").
+user_id_by_name() {
+    local user="$1" id="" name=""
+    while IFS= read -r line; do
+        case "$line" in
+            *'"id":'*) id="${line//[^0-9]/}" ;;
+            *'"name":'*)
+                name="${line#*\": \"}"
+                name="${name%\"*}"
+                if [[ "$name" == "$user" ]]; then
+                    printf '%s\n' "$id"
+                    return 0
+                fi
+                ;;
+        esac
+    done < <(hs users list --output json 2>/dev/null)
+    return 1
+}
+
+require_docker() {
+    if ! command -v docker &>/dev/null; then
+        echo "docker not found in PATH." >&2
+        exit 1
+    fi
+}
+
+server_url() {
+    # Value itself contains colons (https://...), so split only on
+    # the first "server_url:" prefix, not on every colon.
+    sed -n 's/^server_url: *//p' "$CONFIG_FILE" | head -n1
+}
+
+action_up() {
+    compose up -d
+}
+
+action_down() {
+    compose down
+}
+
+action_status() {
+    compose ps
+}
+
+action_node_add() {
+    read -rp "Username for this node: " user
+    if [[ -z "$user" ]]; then
+        echo "Username can't be empty."
+        return
+    fi
+
+    local uid
+    uid="$(user_id_by_name "$user")"
+    if [[ -z "$uid" ]]; then
+        hs users create "$user" || return
+        uid="$(user_id_by_name "$user")"
+    fi
+    if [[ -z "$uid" ]]; then
+        echo "Could not resolve a user ID for '${user}'."
+        return
+    fi
+
+    read -rp "Preauth key expiration [1h]: " exp
+    exp="${exp:-1h}"
+
+    local key
+    key="$(hs preauthkeys create --user "$uid" --expiration "$exp")" || return
+
+    echo
+    echo "Run this on the new device:"
+    echo "  tailscale up --login-server=$(server_url) --authkey=${key}"
+    echo
+}
+
+action_node_list() {
+    hs nodes list
+}
+
+action_node_rm() {
+    hs nodes list
+    read -rp "Node ID to remove: " id
+    if [[ -z "$id" ]]; then
+        echo "No ID given."
+        return
+    fi
+    hs nodes delete --identifier "$id"
+}
+
+main_menu() {
+    local options=(
+        "Start stack (up)"
+        "Stop stack (down)"
+        "Add node (preauth key)"
+        "List nodes"
+        "Remove node"
+        "Status"
+        "Exit"
+    )
+
+    local i choice
+    while true; do
+        echo
+        echo "meshctl — headscale control panel"
+        echo "=================================="
+        i=1
+        for opt in "${options[@]}"; do
+            printf '%d) %s\n' "$i" "$opt"
+            ((i++))
+        done
+
+        # Plain `read`, not `select`: select's body never runs on EOF,
+        # which would leave the outer `while true` spinning forever
+        # once stdin closes. `read`'s exit status makes EOF explicit.
+        if ! read -rp $'\nChoose an option: ' choice; then
+            echo
+            exit 0
+        fi
+
+        case "$choice" in
+            1) action_up ;;
+            2) action_down ;;
+            3) action_node_add ;;
+            4) action_node_list ;;
+            5) action_node_rm ;;
+            6) action_status ;;
+            7) exit 0 ;;
+            *) echo "Invalid option." ;;
+        esac
+    done
+}
+
+require_docker
+main_menu
