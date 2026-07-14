@@ -113,7 +113,17 @@ action_node_rm() {
         echo "No ID given."
         return
     fi
-    hs nodes delete --identifier "$id"
+
+    # hs() feeds headscale /dev/null, so its built-in y/n prompt would
+    # instantly read EOF and abort ("Node not deleted"). Confirm here
+    # in bash instead and skip headscale's prompt with --force.
+    local confirm
+    read -rp "Remove node ${id}? [y/N] " confirm
+    if [[ "$confirm" != [yY] ]]; then
+        echo "Aborted."
+        return
+    fi
+    hs nodes delete --identifier "$id" --force
 }
 
 main_menu() {
