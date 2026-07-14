@@ -64,8 +64,10 @@ cp .env.example .env
 Edit `.env`:
 
 ```env
-HEADSCALE_DOMAIN=mesh.example.com
-[email protected]
+MESH_DOMAIN=mesh.example.com   # your control-plane domain
+MESH_HTTP_PORT=80              # host ports Caddy publishes
+MESH_HTTPS_PORT=443
+MESH_BASE_DOMAIN=home.arpa     # MagicDNS suffix for node hostnames
 ```
 
 ### 3. Launch

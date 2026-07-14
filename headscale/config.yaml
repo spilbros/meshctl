@@ -10,7 +10,8 @@
 #
 # https://myheadscale.example.com:443
 #
-server_url: https://mesh.bucovskij.xyz
+# Intentionally not set here: compose.yaml injects it as
+# HEADSCALE_SERVER_URL, built from MESH_DOMAIN in .env.
 
 # Address to listen to / bind to on the server
 #
@@ -326,6 +327,8 @@ dns:
   # `base_domain` must be a FQDN, without the trailing dot.
   # The FQDN of the hosts will be
   # `hostname.base_domain` (e.g., _myhost.example.com_).
+  # Overridden by HEADSCALE_DNS_BASE_DOMAIN (MESH_BASE_DOMAIN in
+  # .env); the value here is only the fallback default.
   base_domain: home.arpa
 
   # Whether to use the local DNS settings of a node or override the local DNS

@@ -10,7 +10,7 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
-CONFIG_FILE="${SCRIPT_DIR}/headscale/config.yaml"
+ENV_FILE="${SCRIPT_DIR}/.env"
 
 compose() {
     docker compose -f "$COMPOSE_FILE" "$@"
@@ -54,10 +54,24 @@ require_docker() {
     fi
 }
 
+require_env() {
+    # compose.yaml would fail on ${MESH_DOMAIN:?} anyway, but with a
+    # less obvious message; an exported MESH_DOMAIN also satisfies
+    # compose without a .env, so only both missing is fatal.
+    if [[ -z "${MESH_DOMAIN:-}" && ! -f "$ENV_FILE" ]]; then
+        echo "No ${ENV_FILE} found. Run: cp .env.example .env  (then edit MESH_DOMAIN)" >&2
+        exit 1
+    fi
+}
+
 server_url() {
-    # Value itself contains colons (https://...), so split only on
-    # the first "server_url:" prefix, not on every colon.
-    sed -n 's/^server_url: *//p' "$CONFIG_FILE" | head -n1
+    # Same precedence as docker compose: exported MESH_DOMAIN wins
+    # over the .env file.
+    local domain="${MESH_DOMAIN:-}"
+    if [[ -z "$domain" ]]; then
+        domain="$(sed -n 's/^MESH_DOMAIN=//p' "$ENV_FILE" 2>/dev/null | head -n1)"
+    fi
+    printf 'https://%s\n' "$domain"
 }
 
 action_up() {
@@ -170,4 +184,5 @@ main_menu() {
 }
 
 require_docker
+require_env
 main_menu
