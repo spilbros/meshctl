@@ -9,11 +9,15 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-COMPOSE_FILE="${SCRIPT_DIR}/compose.yaml"
 ENV_FILE="${SCRIPT_DIR}/.env"
 
 compose() {
-    docker compose -f "$COMPOSE_FILE" "$@"
+    # No -f on purpose: an explicit file list disables docker
+    # compose's native discovery (compose.yaml + an optional
+    # host-specific compose.override.yaml + .env). Discovery is
+    # cwd-relative, so cd in a subshell to keep meshctl working when
+    # invoked from anywhere.
+    (cd "$SCRIPT_DIR" && docker compose "$@")
 }
 
 hs() {
